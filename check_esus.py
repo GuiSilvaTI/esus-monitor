@@ -6,7 +6,6 @@ Verifica se saiu versão nova e envia notificação via ntfy.sh
 
 import re
 import sys
-import json
 import os
 import urllib.request
 import urllib.error
@@ -85,34 +84,25 @@ def salvar_versao(versao):
 
 
 def enviar_notificacao(versao_nova, versao_anterior):
-    """Envia push notification via ntfy.sh."""
+    """Envia push notification via ntfy.sh usando headers HTTP."""
     url = f"https://ntfy.sh/{NTFY_TOPIC}"
 
-    url_simples = "sisaps.saude.gov.br/sistemas/esusaps"
     if versao_anterior:
         titulo = "🏥 e-SUS PEC: nova versão disponível!"
-        mensagem = f"🆕 Versão {versao_nova} disponível!\nAnterior: {versao_anterior}\nBaixe em: {url_simples}"
+        mensagem = f"🆕 Versão {versao_nova} disponível! (anterior: {versao_anterior})"
     else:
-        titulo = "✅ e-SUS PEC: monitoramento ativo"
-        mensagem = f"Versão atual: {versao_nova}\nVou avisar quando sair novidade!"
-
-    dados = json.dumps({
-        "topic": NTFY_TOPIC,
-        "title": titulo,
-        "message": mensagem,
-        "priority": 4,
-        "tags": ["hospital", "update"],
-        "actions": [{
-            "action": "view",
-            "label": "Abrir site e-SUS",
-            "url": URL_ESUS
-        }]
-    }, ensure_ascii=False).encode("utf-8")
+        titulo = "✅ e-SUS PEC monitorado"
+        mensagem = f"Versão atual: {versao_nova}. Vou avisar quando sair novidade!"
 
     req = urllib.request.Request(
         url,
-        data=dados,
-        headers={"Content-Type": "application/json"},
+        data=mensagem.encode("utf-8"),
+        headers={
+            "Title": titulo.encode("utf-8"),
+            "Priority": "4",
+            "Tags": "hospital,white_check_mark",
+            "Click": URL_ESUS,
+        },
         method="POST",
     )
     try:
@@ -126,7 +116,7 @@ def enviar_notificacao(versao_nova, versao_anterior):
 def main():
     print(f"Verificando atualizações em: {URL_ESUS}")
 
-    versao_atual = "99.99.99"
+    versao_atual = buscar_versao_atual()
     if not versao_atual:
         print("ERRO: Não foi possível encontrar a versão no site.")
         sys.exit(1)
