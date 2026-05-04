@@ -12,7 +12,7 @@ import urllib.request
 import urllib.error
 
 URL_ESUS = "https://sisaps.saude.gov.br/sistemas/esusaps/"
-NTFY_TOPIC = os.environ.get("NTFY_TOPIC", "esus-pec-monitor")  # mude para o seu tópico
+NTFY_TOPIC = os.environ.get("NTFY_TOPIC", "esus-mococa")  # mude para o seu tópico
 VERSION_FILE = "ultima_versao.txt"
 
 
