@@ -12,8 +12,22 @@ import urllib.request
 import urllib.error
 
 URL_ESUS = "https://sisaps.saude.gov.br/sistemas/esusaps/"
-NTFY_TOPIC = os.environ.get("NTFY_TOPIC", "esus-mococa")  # mude para o seu tópico
+NTFY_TOPIC = os.environ.get("NTFY_TOPIC", "esus-pec-monitor")  # mude para o seu tópico
 VERSION_FILE = "ultima_versao.txt"
+
+
+def versao_valida(v):
+    """Verifica se o número de versão é plausível para o e-SUS PEC."""
+    partes = v.split(".")
+    if len(partes) < 2:
+        return False
+    try:
+        maior = int(partes[0])
+        menor = int(partes[1])
+        # e-SUS PEC: versão maior entre 3 e 15, menor entre 0 e 99
+        return 3 <= maior <= 15 and 0 <= menor <= 99
+    except ValueError:
+        return False
 
 
 def buscar_versao_atual():
@@ -29,25 +43,29 @@ def buscar_versao_atual():
         print(f"Erro ao acessar o site: {e}")
         sys.exit(1)
 
-    # Procura padrões como "Versão 5.4.36", "Version 5.4.36", "v5.4.36"
-    padrao = r"[Vv]ers[aã]o\s+(\d+\.\d+(?:\.\d+)?(?:\.\d+)?)"
-    match = re.search(padrao, html)
-    if match:
+    # Prioridade 1: botão de download (mais confiável)
+    # Ex: "Download Versão 5.4.36"
+    padrao1 = r"Download\s+Vers[aã]o\s+(\d+\.\d+(?:\.\d+)?(?:\.\d+)?)"
+    match = re.search(padrao1, html, re.IGNORECASE)
+    if match and versao_valida(match.group(1)):
+        print(f"  → versão encontrada no botão de download")
         return match.group(1)
 
-    # Fallback: procura no botão de download
-    padrao2 = r"Download\s+Vers[aã]o\s+(\d+\.\d+(?:\.\d+)?(?:\.\d+)?)"
-    match2 = re.search(padrao2, html)
-    if match2:
-        return match2.group(1)
+    # Prioridade 2: texto "Versão X.X.X" próximo de palavras-chave do e-SUS
+    # Busca dentro de um contexto relevante para evitar pegar JS de terceiros
+    for trecho in re.finditer(r"(?:esus|pec|aps|sus).{0,200}", html, re.IGNORECASE):
+        m = re.search(r"(\d+\.\d+\.\d+)", trecho.group())
+        if m and versao_valida(m.group(1)):
+            print(f"  → versão encontrada no contexto e-SUS")
+            return m.group(1)
 
-    # Último fallback: qualquer número de versão no HTML
-    padrao3 = r"(\d+\.\d+\.\d+)"
-    matches = re.findall(padrao3, html)
-    # Filtra versões plausíveis do e-SUS (começa com 4, 5, 6...)
-    versoes = [v for v in matches if v.startswith(("4.", "5.", "6.", "7."))]
-    if versoes:
-        return versoes[0]
+    # Prioridade 3: "Versão X.X.X" genérico, mas com validação estrita
+    padrao3 = r"[Vv]ers[aã]o\s+(\d+\.\d+(?:\.\d+)?)"
+    for m in re.finditer(padrao3, html):
+        v = m.group(1)
+        if versao_valida(v):
+            print(f"  → versão encontrada via texto 'Versão'")
+            return v
 
     return None
 
@@ -70,12 +88,13 @@ def enviar_notificacao(versao_nova, versao_anterior):
     """Envia push notification via ntfy.sh."""
     url = f"https://ntfy.sh/{NTFY_TOPIC}"
 
+    url_simples = "sisaps.saude.gov.br/sistemas/esusaps"
     if versao_anterior:
-        titulo = f"🏥 e-SUS PEC atualizado: v{versao_nova}"
-        mensagem = f"Nova versão disponível: {versao_nova}\nAnterior: {versao_anterior}\n\nBaixe em: {URL_ESUS}"
+        titulo = "🏥 e-SUS PEC: nova versão disponível!"
+        mensagem = f"🆕 Versão {versao_nova} disponível!\nAnterior: {versao_anterior}\nBaixe em: {url_simples}"
     else:
-        titulo = f"🏥 e-SUS PEC monitorado: v{versao_nova}"
-        mensagem = f"Monitoramento iniciado. Versão atual: {versao_nova}"
+        titulo = "✅ e-SUS PEC: monitoramento ativo"
+        mensagem = f"Versão atual: {versao_nova}\nVou avisar quando sair novidade!"
 
     dados = json.dumps({
         "topic": NTFY_TOPIC,
@@ -88,7 +107,7 @@ def enviar_notificacao(versao_nova, versao_anterior):
             "label": "Abrir site e-SUS",
             "url": URL_ESUS
         }]
-    }).encode("utf-8")
+    }, ensure_ascii=False).encode("utf-8")
 
     req = urllib.request.Request(
         url,
@@ -107,7 +126,7 @@ def enviar_notificacao(versao_nova, versao_anterior):
 def main():
     print(f"Verificando atualizações em: {URL_ESUS}")
 
-    versao_atual = "99.99.99"
+    versao_atual = buscar_versao_atual()
     if not versao_atual:
         print("ERRO: Não foi possível encontrar a versão no site.")
         sys.exit(1)
