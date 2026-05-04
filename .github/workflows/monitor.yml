@@ -1,0 +1,34 @@
+name: Monitor e-SUS PEC
+
+on:
+  schedule:
+    # Roda a cada 2 horas (ajuste se quiser mais frequente)
+    - cron: "0 */2 * * *"
+  workflow_dispatch:  # Permite rodar manualmente pelo site do GitHub
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Baixar repositório
+        uses: actions/checkout@v4
+
+      - name: Restaurar versão salva
+        uses: actions/cache@v4
+        with:
+          path: ultima_versao.txt
+          key: esus-versao-cache
+          restore-keys: esus-versao-cache
+
+      - name: Verificar versão do e-SUS PEC
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: python3 check_esus.py
+
+      - name: Salvar versão no cache
+        uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: ultima_versao.txt
+          key: esus-versao-cache-${{ github.run_id }}
