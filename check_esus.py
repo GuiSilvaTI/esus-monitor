@@ -107,7 +107,7 @@ def enviar_notificacao(versao_nova, versao_anterior):
 def main():
     print(f"Verificando atualizações em: {URL_ESUS}")
 
-    versao_atual = buscar_versao_atual()
+    versao_atual = "99.99.99"
     if not versao_atual:
         print("ERRO: Não foi possível encontrar a versão no site.")
         sys.exit(1)
